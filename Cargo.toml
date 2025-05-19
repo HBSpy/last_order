@@ -1,0 +1,15 @@
+[package]
+name = "last_order"
+description = "A Rust library for managing network devices."
+author = "HBSpy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+log = "0.4"
+regex = "1.11"
+ssh2 = "0.9"
+
+[dev-dependencies]
+env_logger = "0.11"
