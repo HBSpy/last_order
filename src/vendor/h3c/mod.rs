@@ -3,6 +3,7 @@ use std::net::ToSocketAddrs;
 use anyhow::Result;
 use regex::Regex;
 
+use crate::generic::config::{Configurable, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 
 pub type H3cSSH = H3cDevice<SSHConnection>;
@@ -34,5 +35,32 @@ impl<C: Connection<ConnectionHandler = C>> H3cDevice<C> {
 
     pub fn version(&mut self) -> Result<String> {
         self.connection.execute("display version", &self.prompt_end)
+    }
+
+    pub fn ping(&mut self, ip: &str) -> Result<String> {
+        let command = format!("ping {}", ip);
+        self.connection.execute(&command, &self.prompt_end)
+    }
+}
+
+impl<C: Connection> Configurable for H3cDevice<C> {
+    type SessionType = Self;
+
+    fn enter_config(&mut self) -> Result<ConfigurationMode<Self>> {
+        self.prompt_end = Regex::new(r"\[.*\]$")?;
+        self.execute("system-view")?;
+
+        Ok(ConfigurationMode::enter(self))
+    }
+
+    fn execute(&mut self, command: &str) -> Result<String> {
+        self.connection.execute(command, &self.prompt_end)
+    }
+
+    fn exit(&mut self) -> Result<()> {
+        self.prompt_end = Regex::new(r"<.*>")?;
+        self.execute("quit")?;
+
+        Ok(())
     }
 }
