@@ -18,28 +18,35 @@ impl<C: Connection<ConnectionHandler = C>> H3cDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self> {
         let mut device = Self {
             connection: C::connect(addr, username, password)?,
             prompt_end: Regex::new(r"<.*>")?,
         };
 
-        let _ = device.connection.read(&device.prompt_end);
+        device.connection.read(&device.prompt_end)?;
 
-        device
-            .connection
-            .execute("screen-length disable", &device.prompt_end)?;
+        device.execute("screen-length disable")?;
 
         Ok(device)
     }
 
+    pub fn execute(&mut self, command: &str) -> Result<String> {
+        self.connection.execute(command, &self.prompt_end)
+    }
+
     pub fn version(&mut self) -> Result<String> {
-        self.connection.execute("display version", &self.prompt_end)
+        self.execute("display version")
+    }
+
+    pub fn logbuffer(&mut self) -> Result<String> {
+        self.execute("display logbuffer")
     }
 
     pub fn ping(&mut self, ip: &str) -> Result<String> {
         let command = format!("ping {}", ip);
-        self.connection.execute(&command, &self.prompt_end)
+
+        self.execute(&command)
     }
 }
 
@@ -80,6 +87,9 @@ fn test() -> anyhow::Result<()> {
 
     let result = ssh.ping("10.123.11.60")?;
     assert!(result.contains("0.00% packet loss"), "{}", result);
+
+    let result = ssh.logbuffer()?;
+    assert!(result.contains("WRD-24"), "{}", result);
 
     {
         let mut config = ssh.enter_config()?;
