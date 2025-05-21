@@ -1,9 +1,11 @@
 [package]
 name = "last_order"
-description = "A Rust library for managing network devices."
-authors = ["HBSpy"]
 version = "0.1.2"
 edition = "2021"
+authors = ["HBSpy"]
+license = "MIT"
+repository = "https://github.com/HBSpy/last_order"
+description = "A Rust library for managing network devices."
 
 [dependencies]
 anyhow = "1.0"
