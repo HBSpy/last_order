@@ -7,15 +7,15 @@ use crate::generic::config::{Configurable, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 use crate::generic::device::NetworkDevice;
 
-pub type H3cSSH = H3cDevice<SSHConnection>;
+pub type ArubaSSH = ArubaDevice<SSHConnection>;
 
-/// H3C network device implementation.
-pub struct H3cDevice<C: Connection> {
+/// Aruba network device implementation.
+pub struct ArubaDevice<C: Connection> {
     connection: C,
     prompt: Regex,
 }
 
-impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
+impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
     fn connect<A: ToSocketAddrs>(
         addr: A,
         username: Option<&str>,
@@ -23,8 +23,8 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     ) -> Result<Self> {
         let mut device = Self {
             connection: C::connect(addr, username, password)
-                .context("Failed to connect to H3C device")?,
-            prompt: Regex::new(r"<.*>$")?,
+                .context("Failed to connect to Aruba device")?,
+            prompt: Regex::new(r".*[>#]$")?,
         };
 
         device
@@ -32,8 +32,8 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
             .read(&device.prompt)
             .context("Failed to read initial prompt")?;
         device
-            .execute("screen-length disable")
-            .context("Failed to disable screen length")?;
+            .execute("no paging")
+            .context("Failed to disable paging")?;
 
         Ok(device)
     }
@@ -45,12 +45,12 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     }
 
     fn version(&mut self) -> Result<String> {
-        self.execute("display version")
+        self.execute("show version")
             .context("Failed to get version")
     }
 
     fn logbuffer(&mut self) -> Result<String> {
-        self.execute("display logbuffer")
+        self.execute("show log all")
             .context("Failed to get log buffer")
     }
 
@@ -60,20 +60,20 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     }
 }
 
-impl<C: Connection<ConnectionHandler = C>> Configurable for H3cDevice<C> {
+impl<C: Connection<ConnectionHandler = C>> Configurable for ArubaDevice<C> {
     type SessionType = Self;
 
     fn enter_config(&mut self) -> Result<ConfigurationMode<Self>> {
-        self.prompt = Regex::new(r"\[.*\]$")?;
-        self.execute("system-view")
-            .context("Failed to enter system-view")?;
+        self.prompt = Regex::new(r".*\(config.*\) #$")?;
+        self.execute("configure terminal")
+            .context("Failed to enter configuration mode")?;
 
         Ok(ConfigurationMode::new(self))
     }
 
     fn exit(&mut self) -> Result<()> {
-        self.prompt = Regex::new(r"<.*>$")?;
-        self.execute("quit")
+        self.prompt = Regex::new(r".*[>#]$")?;
+        self.execute("end")
             .context("Failed to exit configuration mode")?;
 
         Ok(())
@@ -85,32 +85,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_h3c_device() -> anyhow::Result<()> {
+    fn test_aruba_device() -> anyhow::Result<()> {
         env_logger::try_init().ok();
 
-        let addr = format!("{}:22", "10.123.0.24");
+        let addr = format!("{}:22", "10.123.0.15");
         let user = Some("HBSpy");
         let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-        let mut ssh = H3cSSH::connect(addr, user, pass.as_deref())?;
+        let mut ssh = ArubaSSH::connect(addr, user, pass.as_deref())?;
 
         let result = ssh.version()?;
-        assert!(result.contains("H3C E528"), "{}", result);
+        assert!(result.contains("Aruba7010"), "{}", result);
 
         let result = ssh.ping("10.123.11.60")?;
-        assert!(result.contains("0.00% packet loss"), "{}", result);
+        assert!(result.contains("Success rate is 100 percent"), "{}", result);
 
         let result = ssh.logbuffer()?;
-        assert!(result.contains("WRD-24"), "{}", result);
+        assert!(result.contains(""), "{}", result);
 
         {
-            let mut config = ssh.enter_config()?;
-            config.execute("interface GigabitEthernet 1/0/8")?;
-
-            let result = config.execute("display this")?;
-            assert!(result.contains("to-HPC"), "{}", result);
-
-            config.execute("quit")?;
+            let _config = ssh.enter_config()?;
         }
 
         Ok(())

@@ -1,28 +1,35 @@
 use anyhow::Result;
 
-pub trait Configurable {
-    type SessionType: Configurable;
+use super::device::NetworkDevice;
 
+/// Trait for devices that support configuration mode.
+pub trait Configurable {
+    type SessionType: Configurable + NetworkDevice;
+
+    /// Enters configuration mode.
     fn enter_config(&mut self) -> Result<ConfigurationMode<Self::SessionType>>;
-    fn execute(&mut self, command: &str) -> Result<String>;
+
+    /// Exits the current configuration mode.
     fn exit(&mut self) -> Result<()>;
 }
 
-pub struct ConfigurationMode<'a, T: Configurable> {
-    pub(crate) session: &'a mut T,
+/// Manages configuration mode for a device.
+pub struct ConfigurationMode<'a, T: Configurable + NetworkDevice> {
+    session: &'a mut T,
 }
 
-impl<'a, T: Configurable> ConfigurationMode<'a, T> {
-    pub fn enter(session: &mut T) -> ConfigurationMode<T> {
+impl<'a, T: Configurable + NetworkDevice> ConfigurationMode<'a, T> {
+    pub fn new(session: &'a mut T) -> Self {
         ConfigurationMode { session }
     }
 
+    /// Executes a command in configuration mode using the device's NetworkDevice implementation.
     pub fn execute(&mut self, command: &str) -> Result<String> {
         self.session.execute(command)
     }
 }
 
-impl<T: Configurable> Drop for ConfigurationMode<'_, T> {
+impl<T: Configurable + NetworkDevice> Drop for ConfigurationMode<'_, T> {
     fn drop(&mut self) {
         let _ = self.session.exit();
     }
