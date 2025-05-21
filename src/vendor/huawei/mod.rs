@@ -6,14 +6,14 @@ use regex::Regex;
 use crate::generic::config::{Configurable, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 
-pub type H3cSSH = H3cDevice<SSHConnection>;
+pub type HuaweiSSH = HuaweiDevice<SSHConnection>;
 
-pub struct H3cDevice<C: Connection> {
+pub struct HuaweiDevice<C: Connection> {
     connection: C,
     prompt_end: Regex,
 }
 
-impl<C: Connection<ConnectionHandler = C>> H3cDevice<C> {
+impl<C: Connection<ConnectionHandler = C>> HuaweiDevice<C> {
     pub fn connect<A: ToSocketAddrs>(
         addr: A,
         username: Option<&str>,
@@ -43,7 +43,7 @@ impl<C: Connection<ConnectionHandler = C>> H3cDevice<C> {
     }
 }
 
-impl<C: Connection> Configurable for H3cDevice<C> {
+impl<C: Connection> Configurable for HuaweiDevice<C> {
     type SessionType = Self;
 
     fn enter_config(&mut self) -> Result<ConfigurationMode<Self>> {
@@ -69,24 +69,24 @@ impl<C: Connection> Configurable for H3cDevice<C> {
 fn test() -> anyhow::Result<()> {
     env_logger::try_init().ok();
 
-    let addr = format!("{}:22", "10.123.0.24");
+    let addr = format!("{}:22", "10.123.255.11");
     let user = Some("HBSpy");
     let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-    let mut ssh = H3cSSH::connect(addr, user, pass.as_deref()).unwrap();
+    let mut ssh = HuaweiSSH::connect(addr, user, pass.as_deref()).unwrap();
 
     let result = ssh.version()?;
-    assert!(result.contains("H3C E528"), "{}", result);
+    assert!(result.contains("CE6850-48S4Q-EI"), "{}", result);
 
     let result = ssh.ping("10.123.11.60")?;
     assert!(result.contains("0.00% packet loss"), "{}", result);
 
     {
         let mut config = ssh.enter_config()?;
-        config.execute("interface GigabitEthernet 1/0/8")?;
+        config.execute("interface 10GE 1/0/1")?;
 
         let result = config.execute("display this")?;
-        assert!(result.contains("to-HPC"), "{}", result);
+        assert!(result.contains("description To-ESXi-100-100"), "{}", result);
 
         config.execute("quit")?;
     }

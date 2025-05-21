@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::{Result, anyhow};
 use log::debug;
 use regex::Regex;
-use ssh2::{Channel, Session};
+use ssh2::{Channel, MethodType, Session};
 
 pub trait Connection {
     type ConnectionHandler;
@@ -50,6 +50,8 @@ impl SSHConnection {
         };
         let mut sess = Session::new()?;
         sess.set_timeout(60000);
+
+        sess.method_pref(MethodType::HostKey, "ssh-rsa")?;
 
         sess.set_tcp_stream(tcp);
         sess.handshake()?;

@@ -2,8 +2,8 @@
 name = "last_order"
 description = "A Rust library for managing network devices."
 authors = ["HBSpy"]
-version = "0.1.0"
-edition = "2024"
+version = "0.1.2"
+edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
