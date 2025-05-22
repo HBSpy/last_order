@@ -3,7 +3,7 @@ use std::net::ToSocketAddrs;
 use anyhow::{Context, Result};
 use regex::Regex;
 
-use crate::generic::config::{Configurable, ConfigurationMode};
+use crate::generic::config::{ConfigSession, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 use crate::generic::device::NetworkDevice;
 
@@ -16,6 +16,13 @@ pub struct CiscoDevice<C: Connection> {
 }
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
+    fn as_any(&mut self) -> &mut dyn std::any::Any
+    where
+        Self: 'static,
+    {
+        self
+    }
+
     fn connect<A: ToSocketAddrs>(
         addr: A,
         username: Option<&str>,
@@ -44,6 +51,22 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
             .context("Failed to execute command")
     }
 
+    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>> {
+        self.prompt = Regex::new(r".*\(config.*\)#$")?;
+        self.execute("configure terminal")
+            .context("Failed to enter configuration mode")?;
+
+        Ok(Box::new(ConfigurationMode::new(self)))
+    }
+
+    fn exit(&mut self) -> Result<()> {
+        self.prompt = Regex::new(r".*[>#]$")?;
+        self.execute("end")
+            .context("Failed to exit configuration mode")?;
+
+        Ok(())
+    }
+
     fn version(&mut self) -> Result<String> {
         self.execute("show version")
             .context("Failed to get version")
@@ -60,29 +83,10 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
     }
 }
 
-impl<C: Connection<ConnectionHandler = C>> Configurable for CiscoDevice<C> {
-    type SessionType = Self;
-
-    fn enter_config(&mut self) -> Result<ConfigurationMode<Self>> {
-        self.prompt = Regex::new(r".*\(config.*\)#$")?;
-        self.execute("configure terminal")
-            .context("Failed to enter configuration mode")?;
-
-        Ok(ConfigurationMode::new(self))
-    }
-
-    fn exit(&mut self) -> Result<()> {
-        self.prompt = Regex::new(r".*[>#]$")?;
-        self.execute("end")
-            .context("Failed to exit configuration mode")?;
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    #[allow(unused_imports)]
+    use crate::vendor::{create_network_device, Vendor};
 
     #[ignore = "no test device"]
     #[test]

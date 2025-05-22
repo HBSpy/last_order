@@ -1,6 +1,8 @@
-use std::net::ToSocketAddrs;
+use std::{any::Any, net::ToSocketAddrs};
 
 use anyhow::Result;
+
+use super::config::ConfigSession;
 
 /// Trait for network devices with vendor-specific behavior.
 pub trait NetworkDevice {
@@ -13,9 +15,26 @@ pub trait NetworkDevice {
     where
         Self: Sized;
 
+    /// Converts the device into a dynamic trait object for storage in a collection.
+    fn into_dyn(self) -> Box<dyn NetworkDevice>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+
+    /// Returns the device as an Any trait object for downcasting.
+    fn as_any(&mut self) -> &mut dyn Any
+    where
+        Self: 'static;
+
     /// Executes a command on the device and returns the output.
     /// Used for both general commands and commands in configuration mode.
     fn execute(&mut self, command: &str) -> Result<String>;
+
+    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>>;
+
+    fn exit(&mut self) -> Result<()>;
 
     /// Retrieves the device version information.
     fn version(&mut self) -> Result<String>;

@@ -1,9 +1,10 @@
+use std::any::Any;
 use std::net::ToSocketAddrs;
 
 use anyhow::{Context, Result};
 use regex::Regex;
 
-use crate::generic::config::{Configurable, ConfigurationMode};
+use crate::generic::config::{ConfigSession, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 use crate::generic::device::NetworkDevice;
 
@@ -16,6 +17,13 @@ pub struct HuaweiDevice<C: Connection> {
 }
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
+    fn as_any(&mut self) -> &mut dyn Any
+    where
+        Self: 'static,
+    {
+        self
+    }
+
     fn connect<A: ToSocketAddrs>(
         addr: A,
         username: Option<&str>,
@@ -44,6 +52,22 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
             .context("Failed to execute command")
     }
 
+    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>> {
+        self.prompt = Regex::new(r"\[.*\]$")?;
+        self.execute("system-view")
+            .context("Failed to enter system-view")?;
+
+        Ok(Box::new(ConfigurationMode::new(self)))
+    }
+
+    fn exit(&mut self) -> Result<()> {
+        self.prompt = Regex::new(r"<.*>$")?;
+        self.execute("quit")
+            .context("Failed to exit configuration mode")?;
+
+        Ok(())
+    }
+
     fn version(&mut self) -> Result<String> {
         self.execute("display version")
             .context("Failed to get version")
@@ -60,29 +84,9 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
     }
 }
 
-impl<C: Connection<ConnectionHandler = C>> Configurable for HuaweiDevice<C> {
-    type SessionType = Self;
-
-    fn enter_config(&mut self) -> Result<ConfigurationMode<Self>> {
-        self.prompt = Regex::new(r"\[.*\]$")?;
-        self.execute("system-view")
-            .context("Failed to enter system-view")?;
-
-        Ok(ConfigurationMode::new(self))
-    }
-
-    fn exit(&mut self) -> Result<()> {
-        self.prompt = Regex::new(r"<.*>$")?;
-        self.execute("quit")
-            .context("Failed to exit configuration mode")?;
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::vendor::{create_network_device, Vendor};
 
     #[test]
     fn test_huawei_device() -> anyhow::Result<()> {
@@ -92,7 +96,7 @@ mod tests {
         let user = Some("HBSpy");
         let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-        let mut ssh = HuaweiSSH::connect(addr, user, pass.as_deref())?;
+        let mut ssh = create_network_device(Vendor::Huawei, addr, user, pass.as_deref())?;
 
         let result = ssh.version()?;
         assert!(result.contains("CE6850-48S4Q-EI"), "{}", result);
