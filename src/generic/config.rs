@@ -1,9 +1,9 @@
-use anyhow::Result;
+use crate::error::Error;
 
 use super::device::NetworkDevice;
 
 pub trait ConfigSession {
-    fn execute(&mut self, command: &str) -> Result<String>;
+    fn execute(&mut self, command: &str) -> Result<String, Error>;
 }
 
 pub struct ConfigurationMode<'a> {
@@ -17,7 +17,7 @@ impl<'a> ConfigurationMode<'a> {
 }
 
 impl ConfigSession for ConfigurationMode<'_> {
-    fn execute(&mut self, command: &str) -> Result<String> {
+    fn execute(&mut self, command: &str) -> Result<String, Error> {
         self.session.execute(command)
     }
 }

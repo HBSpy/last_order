@@ -2,10 +2,11 @@ use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
 use log::debug;
 use regex::Regex;
 use ssh2::{Channel, MethodType, Session};
+
+use crate::error::Error;
 
 /// Trait for establishing and interacting with network connections.
 pub trait Connection {
@@ -16,13 +17,13 @@ pub trait Connection {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> Result<Self::ConnectionHandler>;
+    ) -> Result<Self::ConnectionHandler, Error>;
 
     /// Reads output until a prompt matching the provided regex is found.
-    fn read(&mut self, prompt: &Regex) -> Result<String>;
+    fn read(&mut self, prompt: &Regex) -> Result<String, Error>;
 
     /// Executes a command and returns the output until the prompt is matched.
-    fn execute(&mut self, command: &str, prompt: &Regex) -> Result<String>;
+    fn execute(&mut self, command: &str, prompt: &Regex) -> Result<String, Error>;
 }
 
 /// SSH connection implementation for network devices.
@@ -37,14 +38,11 @@ impl SSHConnection {
     fn establish_connection<A: ToSocketAddrs>(
         addr: A,
         timeout: Option<Duration>,
-    ) -> Result<Session> {
+    ) -> Result<Session, Error> {
         let mut last_error = None;
         let mut tcp = None;
 
-        for addr in addr
-            .to_socket_addrs()
-            .context("Failed to resolve socket address")?
-        {
+        for addr in addr.to_socket_addrs().map_err(Error::Generic)? {
             let result = if let Some(timeout) = timeout {
                 TcpStream::connect_timeout(&addr, timeout)
             } else {
@@ -65,30 +63,37 @@ impl SSHConnection {
 
         let tcp = tcp.ok_or_else(|| {
             last_error.map_or_else(
-                || anyhow::anyhow!("No socket address was supplied in addr"),
-                |e| anyhow::anyhow!("Failed to connect to any address: {}", e),
+                || {
+                    Error::Generic(io::Error::new(
+                        io::ErrorKind::Other,
+                        "No socket address was supplied in addr",
+                    ))
+                },
+                |e| Error::Generic(e),
             )
         })?;
 
-        let mut sess = Session::new().context("Failed to create SSH session")?;
-        sess.set_timeout(60_000); // 60 seconds timeout
+        let mut sess = Session::new().map_err(|e| Error::Generic(e.into()))?;
+        sess.set_timeout(60_000);
+
         sess.method_pref(MethodType::HostKey, "ssh-rsa")
-            .context("Failed to set host key preference")?;
+            .map_err(|e| Error::Generic(e.into()))?;
+
         sess.set_tcp_stream(tcp);
-        sess.handshake().context("SSH handshake failed")?;
+        sess.handshake().map_err(|e| Error::Generic(e.into()))?;
 
         Ok(sess)
     }
 
     /// Creates a new SSH channel session.
-    fn make_channel_session(session: Session) -> Result<SSHConnection> {
+    fn make_channel_session(session: Session) -> Result<SSHConnection, Error> {
         let mut channel = session
             .channel_session()
-            .context("Failed to create channel session")?;
+            .map_err(|e| Error::Generic(e.into()))?;
         channel
             .request_pty("vt100", None, None)
-            .context("Failed to request PTY")?;
-        channel.shell().context("Failed to start shell")?;
+            .map_err(|e| Error::Generic(e.into()))?;
+        channel.shell().map_err(|e| Error::Generic(e.into()))?;
 
         Ok(SSHConnection {
             sess: session,
@@ -101,16 +106,17 @@ impl SSHConnection {
         addr: A,
         username: &str,
         timeout: Option<Duration>,
-    ) -> Result<SSHConnection> {
+    ) -> Result<SSHConnection, Error> {
         let sess = Self::establish_connection(addr, timeout)?;
         sess.userauth_agent(username)
-            .context("SSH agent authentication failed")?;
+            .map_err(|_| Error::AuthenticationFailed {
+                user: username.to_string(),
+            })?;
 
         if !sess.authenticated() {
-            return Err(anyhow::anyhow!(
-                "Authentication failed using SSH agent for user: {}",
-                username
-            ));
+            return Err(Error::AuthenticationFailed {
+                user: username.to_string(),
+            });
         }
 
         Self::make_channel_session(sess)
@@ -124,29 +130,26 @@ impl Connection for SSHConnection {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> Result<SSHConnection> {
-        let username = username.ok_or_else(|| {
-            anyhow::anyhow!("Username is required for SSH password authentication")
-        })?;
-        let password = password.ok_or_else(|| {
-            anyhow::anyhow!("Password is required for SSH password authentication")
-        })?;
+    ) -> Result<SSHConnection, Error> {
+        let username = username.unwrap_or("admin");
+        let password = password.unwrap_or("admin");
 
         let sess = Self::establish_connection(addr, None)?;
         sess.userauth_password(username, password)
-            .context("Password authentication failed")?;
+            .map_err(|_| Error::AuthenticationFailed {
+                user: username.to_string(),
+            })?;
 
         if !sess.authenticated() {
-            return Err(anyhow::anyhow!(
-                "Authentication failed for user: {} using password",
-                username
-            ));
+            return Err(Error::AuthenticationFailed {
+                user: username.to_string(),
+            });
         }
 
         Self::make_channel_session(sess)
     }
 
-    fn read(&mut self, prompt: &Regex) -> Result<String> {
+    fn read(&mut self, prompt: &Regex) -> Result<String, Error> {
         debug!("Reading from SSH channel...");
         let mut output = String::new();
         let mut buf = [0u8; 1024];
@@ -171,22 +174,24 @@ impl Connection for SSHConnection {
                     debug!("Read timeout, assuming no more data");
                     break;
                 }
-                Err(e) => return Err(anyhow::anyhow!("Read error: {}", e)),
+                Err(e) => return Err(Error::Generic(e)),
             }
         }
 
         Ok(output)
     }
 
-    fn execute(&mut self, command: &str, prompt: &Regex) -> Result<String> {
+    fn execute(&mut self, command: &str, prompt: &Regex) -> Result<String, Error> {
         debug!("Executing command: {}", command);
         self.channel
             .write_all(command.as_bytes())
-            .context("Failed to write command")?;
+            .map_err(|_| Error::CommandExecution(command.to_owned()))?;
         self.channel
             .write_all(b"\n")
-            .context("Failed to write newline")?;
-        self.channel.flush().context("Failed to flush channel")?;
+            .map_err(|_| Error::CommandExecution(command.to_owned()))?;
+        self.channel
+            .flush()
+            .map_err(|_| Error::CommandExecution(command.to_owned()))?;
 
         self.read(prompt)
     }

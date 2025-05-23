@@ -1,6 +1,6 @@
 use std::{any::Any, net::ToSocketAddrs};
 
-use anyhow::Result;
+use crate::error::Error;
 
 use super::config::ConfigSession;
 
@@ -11,7 +11,7 @@ pub trait NetworkDevice {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> Result<Self>
+    ) -> Result<Self, Error>
     where
         Self: Sized;
 
@@ -30,18 +30,18 @@ pub trait NetworkDevice {
 
     /// Executes a command on the device and returns the output.
     /// Used for both general commands and commands in configuration mode.
-    fn execute(&mut self, command: &str) -> Result<String>;
+    fn execute(&mut self, command: &str) -> Result<String, Error>;
 
-    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>>;
+    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>, Error>;
 
-    fn exit(&mut self) -> Result<()>;
+    fn exit(&mut self) -> Result<(), Error>;
 
     /// Retrieves the device version information.
-    fn version(&mut self) -> Result<String>;
+    fn version(&mut self) -> Result<String, Error>;
 
     /// Retrieves the device log buffer.
-    fn logbuffer(&mut self) -> Result<String>;
+    fn logbuffer(&mut self) -> Result<String, Error>;
 
     /// Performs a ping operation to the specified IP.
-    fn ping(&mut self, ip: &str) -> Result<String>;
+    fn ping(&mut self, ip: &str) -> Result<String, Error>;
 }

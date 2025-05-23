@@ -1,8 +1,8 @@
 use std::net::ToSocketAddrs;
 
-use anyhow::{Context, Result};
 use regex::Regex;
 
+use crate::error::Error;
 use crate::generic::config::{ConfigSession, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 use crate::generic::device::NetworkDevice;
@@ -27,65 +27,56 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> Result<Self> {
+    ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)
-                .context("Failed to connect to H3C device")?,
-            prompt: Regex::new(r"<.*>$")?,
+            connection: C::connect(addr, username, password)?,
+            prompt: Regex::new(r"<.*$").expect("Invalid prompt regex"),
         };
 
-        device
-            .connection
-            .read(&device.prompt)
-            .context("Failed to read initial prompt")?;
-        device
-            .execute("screen-length disable")
-            .context("Failed to disable screen length")?;
+        device.connection.read(&device.prompt)?;
+        device.execute("screen-length disable")?;
 
         Ok(device)
     }
 
-    fn execute(&mut self, command: &str) -> Result<String> {
+    fn execute(&mut self, command: &str) -> Result<String, Error> {
         self.connection
             .execute(command, &self.prompt)
-            .context("Failed to execute command")
+            .map_err(|_| Error::CommandExecution(command.to_string()))
     }
 
-    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>> {
-        self.prompt = Regex::new(r"\[.*\]$")?;
-        self.execute("system-view")
-            .context("Failed to enter system-view")?;
+    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>, Error> {
+        self.prompt = Regex::new(r"\[.*\]$").expect("Invalid prompt regex");
+        self.execute("system-view")?;
 
         Ok(Box::new(ConfigurationMode::new(self)))
     }
 
-    fn exit(&mut self) -> Result<()> {
-        self.prompt = Regex::new(r"<.*>$")?;
-        self.execute("quit")
-            .context("Failed to exit configuration mode")?;
+    fn exit(&mut self) -> Result<(), Error> {
+        self.prompt = Regex::new(r"<.*>$").expect("Invalid prompt regex");
+        self.execute("quit")?;
 
         Ok(())
     }
 
-    fn version(&mut self) -> Result<String> {
+    fn version(&mut self) -> Result<String, Error> {
         self.execute("display version")
-            .context("Failed to get version")
     }
 
-    fn logbuffer(&mut self) -> Result<String> {
+    fn logbuffer(&mut self) -> Result<String, Error> {
         self.execute("display logbuffer")
-            .context("Failed to get log buffer")
     }
 
-    fn ping(&mut self, ip: &str) -> Result<String> {
+    fn ping(&mut self, ip: &str) -> Result<String, Error> {
         let command = format!("ping {}", ip);
-        self.execute(&command).context("Ping command failed")
+
+        self.execute(&command)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::vendor::{Vendor, create_network_device};
+    use crate::{create_network_device, Vendor};
 
     #[test]
     fn test_h3c_device() -> anyhow::Result<()> {
