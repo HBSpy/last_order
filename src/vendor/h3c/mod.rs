@@ -30,7 +30,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     ) -> Result<Self, Error> {
         let mut device = Self {
             connection: C::connect(addr, username, password)?,
-            prompt: Regex::new(r"<.*$").expect("Invalid prompt regex"),
+            prompt: Regex::new(r"[<\[].*[>\]]$").expect("Invalid prompt regex"),
         };
 
         device.connection.read(&device.prompt)?;
@@ -46,14 +46,12 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     }
 
     fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>, Error> {
-        self.prompt = Regex::new(r"\[.*\]$").expect("Invalid prompt regex");
         self.execute("system-view")?;
 
         Ok(Box::new(ConfigurationMode::new(self)))
     }
 
     fn exit(&mut self) -> Result<(), Error> {
-        self.prompt = Regex::new(r"<.*>$").expect("Invalid prompt regex");
         self.execute("quit")?;
 
         Ok(())
@@ -91,8 +89,8 @@ mod tests {
         let result = ssh.version()?;
         assert!(result.contains("H3C E528"), "{}", result);
 
-        let result = ssh.ping("10.123.11.60")?;
-        assert!(result.contains("0.00% packet loss"), "{}", result);
+        let result = ssh.ping("10.123.0.1")?;
+        assert!(result.contains("5 packet(s) received"), "{}", result);
 
         let result = ssh.logbuffer()?;
         assert!(result.contains("WRD-24"), "{}", result);
@@ -106,6 +104,9 @@ mod tests {
 
             config.execute("quit")?;
         }
+
+        let result = ssh.execute("display environment")?;
+        assert!(result.contains("hotspot 1"), "{}", result);
 
         Ok(())
     }

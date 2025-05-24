@@ -1,9 +1,9 @@
 use std::any::Any;
 use std::net::ToSocketAddrs;
 
-use anyhow::{Context, Result};
 use regex::Regex;
 
+use crate::error::Error;
 use crate::generic::config::{ConfigSession, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 use crate::generic::device::NetworkDevice;
@@ -28,65 +28,54 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> Result<Self> {
+    ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)
-                .context("Failed to connect to Huawei device")?,
-            prompt: Regex::new(r"<.*>$")?,
+            connection: C::connect(addr, username, password)?,
+            prompt: Regex::new(r"[<\[].*[>\]]$").expect("Invalid prompt regex"),
         };
 
-        device
-            .connection
-            .read(&device.prompt)
-            .context("Failed to read initial prompt")?;
-        device
-            .execute("screen-length 0 temporary")
-            .context("Failed to set screen length")?;
+        device.connection.read(&device.prompt)?;
+        device.execute("screen-length 0 temporary")?;
 
         Ok(device)
     }
 
-    fn execute(&mut self, command: &str) -> Result<String> {
+    fn execute(&mut self, command: &str) -> Result<String, Error> {
         self.connection
             .execute(command, &self.prompt)
-            .context("Failed to execute command")
+            .map_err(|_| Error::CommandExecution(command.to_string()))
     }
 
-    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>> {
-        self.prompt = Regex::new(r"\[.*\]$")?;
-        self.execute("system-view")
-            .context("Failed to enter system-view")?;
+    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>, Error> {
+        self.execute("system-view")?;
 
         Ok(Box::new(ConfigurationMode::new(self)))
     }
 
-    fn exit(&mut self) -> Result<()> {
-        self.prompt = Regex::new(r"<.*>$")?;
-        self.execute("quit")
-            .context("Failed to exit configuration mode")?;
+    fn exit(&mut self) -> Result<(), Error> {
+        self.execute("quit")?;
 
         Ok(())
     }
 
-    fn version(&mut self) -> Result<String> {
+    fn version(&mut self) -> Result<String, Error> {
         self.execute("display version")
-            .context("Failed to get version")
     }
 
-    fn logbuffer(&mut self) -> Result<String> {
+    fn logbuffer(&mut self) -> Result<String, Error> {
         self.execute("display logbuffer")
-            .context("Failed to get log buffer")
     }
 
-    fn ping(&mut self, ip: &str) -> Result<String> {
+    fn ping(&mut self, ip: &str) -> Result<String, Error> {
         let command = format!("ping {}", ip);
-        self.execute(&command).context("Ping command failed")
+
+        self.execute(&command)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::vendor::{create_network_device, Vendor};
+    use crate::{create_network_device, Vendor};
 
     #[test]
     fn test_huawei_device() -> anyhow::Result<()> {
@@ -101,8 +90,8 @@ mod tests {
         let result = ssh.version()?;
         assert!(result.contains("CE6850-48S4Q-EI"), "{}", result);
 
-        let result = ssh.ping("10.123.11.60")?;
-        assert!(result.contains("0.00% packet loss"), "{}", result);
+        let result = ssh.ping("10.123.0.1")?;
+        assert!(result.contains("5 packet(s) received"), "{}", result);
 
         let result = ssh.logbuffer()?;
         assert!(result.contains("WRD-IDC-11"), "{}", result);
@@ -116,6 +105,9 @@ mod tests {
 
             config.execute("quit")?;
         }
+
+        let result = ssh.execute("display device")?;
+        assert!(result.contains("FAN1"), "{}", result);
 
         Ok(())
     }

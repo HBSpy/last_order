@@ -1,8 +1,8 @@
 use std::net::ToSocketAddrs;
 
-use anyhow::{Context, Result};
 use regex::Regex;
 
+use crate::error::Error;
 use crate::generic::config::{ConfigSession, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 use crate::generic::device::NetworkDevice;
@@ -27,65 +27,54 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> Result<Self> {
+    ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)
-                .context("Failed to connect to Aruba device")?,
-            prompt: Regex::new(r".*[>#]$")?,
+            connection: C::connect(addr, username, password)?,
+            prompt: Regex::new(r"\(.+\)\s\[.+\]\s(\(config\)\s)?#$").expect("Invalid prompt regex"),
         };
 
-        device
-            .connection
-            .read(&device.prompt)
-            .context("Failed to read initial prompt")?;
-        device
-            .execute("no paging")
-            .context("Failed to disable paging")?;
+        device.connection.read(&device.prompt)?;
+        device.execute("no paging")?;
 
         Ok(device)
     }
 
-    fn execute(&mut self, command: &str) -> Result<String> {
+    fn execute(&mut self, command: &str) -> Result<String, Error> {
         self.connection
             .execute(command, &self.prompt)
-            .context("Failed to execute command")
+            .map_err(|_| Error::CommandExecution(command.to_string()))
     }
 
-    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>> {
-        self.prompt = Regex::new(r".*\(config.*\) #$")?;
-        self.execute("configure terminal")
-            .context("Failed to enter configuration mode")?;
+    fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>, Error> {
+        self.execute("configure terminal")?;
 
         Ok(Box::new(ConfigurationMode::new(self)))
     }
 
-    fn exit(&mut self) -> Result<()> {
-        self.prompt = Regex::new(r".*[>#]$")?;
-        self.execute("end")
-            .context("Failed to exit configuration mode")?;
+    fn exit(&mut self) -> Result<(), Error> {
+        self.execute("end")?;
 
         Ok(())
     }
 
-    fn version(&mut self) -> Result<String> {
+    fn version(&mut self) -> Result<String, Error> {
         self.execute("show version")
-            .context("Failed to get version")
     }
 
-    fn logbuffer(&mut self) -> Result<String> {
+    fn logbuffer(&mut self) -> Result<String, Error> {
         self.execute("show log all")
-            .context("Failed to get log buffer")
     }
 
-    fn ping(&mut self, ip: &str) -> Result<String> {
+    fn ping(&mut self, ip: &str) -> Result<String, Error> {
         let command = format!("ping {}", ip);
-        self.execute(&command).context("Ping command failed")
+
+        self.execute(&command)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::vendor::{create_network_device, Vendor};
+    use crate::{create_network_device, Vendor};
 
     #[test]
     fn test_aruba_device() -> anyhow::Result<()> {
@@ -100,7 +89,7 @@ mod tests {
         let result = ssh.version()?;
         assert!(result.contains("Aruba7010"), "{}", result);
 
-        let result = ssh.ping("10.123.11.60")?;
+        let result = ssh.ping("10.123.0.1")?;
         assert!(result.contains("Success rate is 100 percent"), "{}", result);
 
         let result = ssh.logbuffer()?;
@@ -109,6 +98,9 @@ mod tests {
         {
             let _config = ssh.enter_config()?;
         }
+
+        let result = ssh.execute("show hostname")?;
+        assert!(result.contains("WRD-AC-1"), "{}", result);
 
         Ok(())
     }

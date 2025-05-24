@@ -7,7 +7,7 @@ pub trait ConfigSession {
 }
 
 pub struct ConfigurationMode<'a> {
-    session: &'a mut dyn NetworkDevice,
+    pub(crate) session: &'a mut dyn NetworkDevice,
 }
 
 impl<'a> ConfigurationMode<'a> {

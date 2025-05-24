@@ -15,6 +15,9 @@ A Rust library for managing network devices.
 
 ## TODO
 
+- [ ] Test error handling
+- [ ] trim command and prompt from output and parse the result
+
 ### Vendors
 
 - [x] Aruba
@@ -27,8 +30,8 @@ A Rust library for managing network devices.
 ### Commands:
 
 - [x] version
-- [x] logbuffer
-- [x] ping
+- [ ] logbuffer
+- [ ] ping
 
 ## Example
 

@@ -13,10 +13,10 @@ use error::Error;
 #[derive(Debug, Clone, Copy, PartialEq, EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum Vendor {
-    // Aruba,
-    // Cisco,
+    Aruba,
+    Cisco,
     H3C,
-    // Huawei,
+    Huawei,
 }
 
 /// Creates a new network device based on the specified vendor.
@@ -35,21 +35,10 @@ pub fn create_network_device<A: ToSocketAddrs>(
     username: Option<&str>,
     password: Option<&str>,
 ) -> Result<Box<dyn NetworkDevice>, Error> {
-    match vendor {
-        Vendor::H3C => {
-            let device = vendor::h3c::H3cSSH::connect(addr, username, password)?;
-            Ok(device.into_dyn())
-        } // Vendor::Aruba => {
-          //     let device = vendor::aruba::ArubaSSH::connect(addr, username, password)?;
-          //     Ok(device.into_dyn())
-          // }
-          // Vendor::Cisco => {
-          //     let device = vendor::cisco::CiscoSSH::connect(addr, username, password)?;
-          //     Ok(device.into_dyn())
-          // }
-          // Vendor::Huawei => {
-          //     let device = vendor::huawei::HuaweiSSH::connect(addr, username, password)?;
-          //     Ok(device.into_dyn())
-          // }
-    }
+    Ok(match vendor {
+        Vendor::Aruba => vendor::aruba::ArubaSSH::connect(addr, username, password)?.into_dyn(),
+        Vendor::Cisco => vendor::cisco::CiscoSSH::connect(addr, username, password)?.into_dyn(),
+        Vendor::H3C => vendor::h3c::H3cSSH::connect(addr, username, password)?.into_dyn(),
+        Vendor::Huawei => vendor::huawei::HuaweiSSH::connect(addr, username, password)?.into_dyn(),
+    })
 }
