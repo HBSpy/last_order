@@ -40,7 +40,7 @@ pub trait NetworkDevice {
     fn version(&mut self) -> Result<String, Error>;
 
     /// Retrieves the device log buffer.
-    fn logbuffer(&mut self) -> Result<String, Error>;
+    fn logbuffer(&mut self) -> Result<Vec<String>, Error>;
 
     /// Performs a ping operation to the specified IP.
     fn ping(&mut self, ip: &str) -> Result<String, Error>;

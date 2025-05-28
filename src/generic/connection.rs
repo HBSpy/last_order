@@ -151,6 +151,7 @@ impl Connection for SSHConnection {
 
     fn read(&mut self, prompt: &Regex) -> Result<String, Error> {
         debug!("Reading from SSH channel...");
+
         let mut output = String::new();
         let mut buf = [0u8; 1024];
 
@@ -183,16 +184,17 @@ impl Connection for SSHConnection {
 
     fn execute(&mut self, command: &str, prompt: &Regex) -> Result<String, Error> {
         debug!("Executing command: {}", command);
-        self.channel
-            .write_all(command.as_bytes())
-            .map_err(|_| Error::CommandExecution(command.to_owned()))?;
-        self.channel
-            .write_all(b"\n")
-            .map_err(|_| Error::CommandExecution(command.to_owned()))?;
-        self.channel
-            .flush()
-            .map_err(|_| Error::CommandExecution(command.to_owned()))?;
 
-        self.read(prompt)
+        let command_with_newline = format!("{}\n", command);
+
+        self.channel
+            .write_all(command_with_newline.as_bytes())
+            .and_then(|_| self.channel.flush())
+            .map_err(|_| Error::CommandExecution(command.to_string()))?;
+
+        let output = self.read(prompt)?;
+        let trimmed = prompt.replace_all(&output, "").to_string();
+
+        Ok(trimmed)
     }
 }

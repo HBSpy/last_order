@@ -15,6 +15,9 @@ pub struct H3cDevice<C: Connection> {
     prompt: Regex,
 }
 
+// Constants for error messages when executing commands
+const INVALID_INPUT: &str = "% Unrecognized command found at '^' position.\r\n";
+
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     fn as_any(&mut self) -> &mut dyn std::any::Any
     where
@@ -40,9 +43,16 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     }
 
     fn execute(&mut self, command: &str) -> Result<String, Error> {
-        self.connection
-            .execute(command, &self.prompt)
-            .map_err(|_| Error::CommandExecution(command.to_string()))
+        let output = self.connection.execute(command, &self.prompt)?;
+
+        if output.ends_with(INVALID_INPUT) {
+            return Err(Error::CommandExecution(command.to_string()));
+        }
+
+        let prefix = format!("{}\r\n", command);
+        let output = output.strip_prefix(&prefix).unwrap_or(&output).to_string();
+
+        Ok(output)
     }
 
     fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>, Error> {
@@ -61,8 +71,22 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
         self.execute("display version")
     }
 
-    fn logbuffer(&mut self) -> Result<String, Error> {
-        self.execute("display logbuffer")
+    fn logbuffer(&mut self) -> Result<Vec<String>, Error> {
+        let output = self.execute("display logbuffer")?;
+
+        /*
+         - An identifier of percent sign (%) indicates a log with a level equal to or higher than informational.
+         - An identifier of asterisk (*) indicates a debugging log or a trace log.
+         - An identifier of caret (^) indicates a diagnostic log.
+        */
+        let lines: Vec<String> = output
+            .lines()
+            .skip_while(|line| !line.trim().is_empty())
+            .skip(1)
+            .map(String::from)
+            .collect();
+
+        Ok(lines)
     }
 
     fn ping(&mut self, ip: &str) -> Result<String, Error> {
@@ -77,7 +101,7 @@ mod tests {
     use crate::{create_network_device, Vendor};
 
     #[test]
-    fn test_h3c_device() -> anyhow::Result<()> {
+    fn test_h3c() -> anyhow::Result<()> {
         env_logger::try_init().ok();
 
         let addr = format!("{}:22", "10.123.0.24");
@@ -86,6 +110,9 @@ mod tests {
 
         let mut ssh = create_network_device(Vendor::H3C, addr, user, pass.as_deref())?;
 
+        let result = ssh.execute("BAD_COMMAND");
+        assert!(result.is_err(), "Expected an Err: {:?}", result);
+
         let result = ssh.version()?;
         assert!(result.contains("H3C E528"), "{}", result);
 
@@ -93,7 +120,10 @@ mod tests {
         assert!(result.contains("5 packet(s) received"), "{}", result);
 
         let result = ssh.logbuffer()?;
-        assert!(result.contains("WRD-24"), "{}", result);
+        assert!(
+            result.iter().any(|line| line.contains("WRD-24")),
+            "Log buffer does not contain expected entry"
+        );
 
         {
             let mut config = ssh.enter_config()?;

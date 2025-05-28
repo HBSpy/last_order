@@ -16,12 +16,11 @@ A Rust library for managing network devices.
 ## TODO
 
 - [ ] Test error handling
-- [ ] trim command and prompt from output and parse the result
 
 ### Vendors
 
 - [x] Aruba
-- [x] Cisco
+- [ ] Cisco
 - [x] H3C
 - [x] Huawei
 - [ ] Ruijie
@@ -29,9 +28,9 @@ A Rust library for managing network devices.
 
 ### Commands:
 
-- [x] version
-- [ ] logbuffer
-- [ ] ping
+- version
+- logbuffer
+- ping
 
 ## Example
 

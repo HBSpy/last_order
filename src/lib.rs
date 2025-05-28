@@ -14,7 +14,7 @@ use error::Error;
 #[strum(serialize_all = "snake_case")]
 pub enum Vendor {
     Aruba,
-    Cisco,
+    // Cisco,
     H3C,
     Huawei,
 }
@@ -37,8 +37,33 @@ pub fn create_network_device<A: ToSocketAddrs>(
 ) -> Result<Box<dyn NetworkDevice>, Error> {
     Ok(match vendor {
         Vendor::Aruba => vendor::aruba::ArubaSSH::connect(addr, username, password)?.into_dyn(),
-        Vendor::Cisco => vendor::cisco::CiscoSSH::connect(addr, username, password)?.into_dyn(),
+        // Vendor::Cisco => vendor::cisco::CiscoSSH::connect(addr, username, password)?.into_dyn(),
         Vendor::H3C => vendor::h3c::H3cSSH::connect(addr, username, password)?.into_dyn(),
         Vendor::Huawei => vendor::huawei::HuaweiSSH::connect(addr, username, password)?.into_dyn(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dev() -> anyhow::Result<()> {
+        env_logger::try_init().ok();
+
+        // let ssh = (Vendor::H3C, format!("{}:22", "10.123.0.24"));
+        // let ssh = (Vendor::Huawei, format!("{}:22", "10.123.255.11"));
+        let ssh = (Vendor::Aruba, format!("{}:22", "10.123.0.15"));
+
+        let user = Some("HBSpy");
+        let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
+
+        let mut ssh = create_network_device(ssh.0, ssh.1, user, pass.as_deref())?;
+
+        let result = ssh.execute("show alarms")?;
+
+        dbg!(&result);
+
+        Ok(())
+    }
 }

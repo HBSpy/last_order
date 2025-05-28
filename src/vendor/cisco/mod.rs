@@ -40,9 +40,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
     }
 
     fn execute(&mut self, command: &str) -> Result<String, Error> {
-        self.connection
-            .execute(command, &self.prompt)
-            .map_err(|_| Error::CommandExecution(command.to_string()))
+        self.connection.execute(command, &self.prompt)
     }
 
     fn enter_config(&mut self) -> Result<Box<dyn ConfigSession + '_>, Error> {
@@ -79,7 +77,7 @@ mod tests {
 
     #[ignore = "no test device"]
     #[test]
-    fn test_cisco_device() -> anyhow::Result<()> {
+    fn test_cisco() -> anyhow::Result<()> {
         // Placeholder test; update with actual device details
         Ok(())
     }
