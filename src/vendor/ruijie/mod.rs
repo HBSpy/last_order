@@ -7,19 +7,18 @@ use crate::generic::config::{ConfigSession, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 use crate::generic::device::NetworkDevice;
 
-pub type ArubaSSH = ArubaDevice<SSHConnection>;
+pub type RuijieSSH = RuijieDevice<SSHConnection>;
 
-/// Aruba network device implementation.
-pub struct ArubaDevice<C: Connection> {
+/// Ruijie network device implementation.
+pub struct RuijieDevice<C: Connection> {
     connection: C,
     prompt: Regex,
 }
 
 // Constants for error messages when executing commands
-const INVALID_INPUT: &str = "Invalid input detected at '^' marker.\r\n";
-const PLATFORM_NOT_APPLICABLE: &str = "Command not applicable for this platform\r\n";
+const INVALID_INPUT: &str = "% Invalid input detected at '^' marker.\r\n\r\n";
 
-impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
+impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
     fn as_any(&mut self) -> &mut dyn std::any::Any
     where
         Self: 'static,
@@ -34,11 +33,11 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
     ) -> Result<Self, Error> {
         let mut device = Self {
             connection: C::connect(addr, username, password)?,
-            prompt: Regex::new(r"\(.+\)\s\[.+\]\s(\(config\)\s)?#$").expect("Invalid prompt regex"),
+            prompt: Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?#$").expect("Invalid prompt regex"),
         };
 
         device.connection.read(&device.prompt)?;
-        device.execute("no paging")?;
+        device.execute("terminal length 0")?;
 
         Ok(device)
     }
@@ -46,11 +45,11 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
     fn execute(&mut self, command: &str) -> Result<String, Error> {
         let output = self.connection.execute(command, &self.prompt)?;
 
-        if output.ends_with(INVALID_INPUT) || output.ends_with(PLATFORM_NOT_APPLICABLE) {
+        if output.contains(INVALID_INPUT) {
             return Err(Error::CommandExecution(command.to_string()));
         }
 
-        let prefix = format!("{}\n\r", command);
+        let prefix = format!("{}\r\n", command);
         let output = output.strip_prefix(&prefix).unwrap_or(&output).to_string();
 
         Ok(output)
@@ -73,8 +72,14 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
     }
 
     fn logbuffer(&mut self) -> Result<Vec<String>, Error> {
-        let output = self.execute("show log network all")?;
-        let lines: Vec<String> = output.lines().map(String::from).collect();
+        let output = self.execute("show logging")?;
+
+        let lines: Vec<String> = output
+            .lines()
+            .skip_while(|line| !line.starts_with("Log Buffer "))
+            .skip(1)
+            .map(String::from)
+            .collect();
 
         Ok(lines)
     }
@@ -94,36 +99,13 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use crate::{create_network_device, Vendor};
 
+    #[ignore = "no test device"]
     #[test]
-    fn test_aruba() -> anyhow::Result<()> {
-        env_logger::try_init().ok();
-
-        let addr = format!("{}:22", "10.123.0.15");
-        let user = Some("HBSpy");
-        let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
-
-        let mut ssh = create_network_device(Vendor::Aruba, addr, user, pass.as_deref())?;
-
-        let result = ssh.execute("BAD_COMMAND");
-        assert!(result.is_err(), "Expected an Err: {:?}", result);
-
-        let result = ssh.version()?;
-        assert!(result.contains("Aruba7010"), "{}", result);
-
-        let result = ssh.ping("10.123.0.1")?;
-        assert!(result.contains("Success rate is 100 percent"), "{}", result);
-
-        let _result = ssh.logbuffer()?;
-
-        {
-            let _config = ssh.enter_config()?;
-        }
-
-        let result = ssh.execute("show hostname")?;
-        assert!(result.contains("WRD-AC-1"), "{}", result);
-
+    fn test_ruijie() -> anyhow::Result<()> {
+        // Placeholder test; update with actual device details
         Ok(())
     }
 }

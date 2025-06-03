@@ -94,6 +94,12 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
 
         self.execute(&command)
     }
+
+    fn traceroute(&mut self, ip: &str) -> Result<String, Error> {
+        let command = format!("tracert {}", ip);
+
+        self.execute(&command)
+    }
 }
 
 #[cfg(test)]

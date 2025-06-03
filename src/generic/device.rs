@@ -44,4 +44,7 @@ pub trait NetworkDevice {
 
     /// Performs a ping operation to the specified IP.
     fn ping(&mut self, ip: &str) -> Result<String, Error>;
+
+    /// Performs a traceroute operation to the specified IP.
+    fn traceroute(&mut self, ip: &str) -> Result<String, Error>;
 }
