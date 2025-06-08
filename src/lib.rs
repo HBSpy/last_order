@@ -53,7 +53,7 @@ mod tests {
     fn dev() -> anyhow::Result<()> {
         env_logger::try_init().ok();
 
-        let ssh = (Vendor::H3C, format!("{}:22", "10.123.0.24"));
+        let ssh = (Vendor::H3C, format!("{}:22", "10.123.0.1"));
         // let ssh = (Vendor::Huawei, format!("{}:22", "10.123.255.11"));
         // let ssh = (Vendor::Aruba, format!("{}:22", "10.123.0.15"));
 
@@ -62,7 +62,7 @@ mod tests {
 
         let mut ssh = create_network_device(ssh.0, ssh.1, user, pass.as_deref())?;
 
-        let result = ssh.version()?;
+        let result = ssh.execute("display wlan ap name WRD-South-3 verbose")?;
 
         dbg!(&result);
 

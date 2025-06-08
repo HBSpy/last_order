@@ -20,10 +20,10 @@ A Rust library for managing network devices.
 ### Vendors
 
 - [x] Aruba
-- [ ] Cisco
+- [x] Cisco
 - [x] H3C
 - [x] Huawei
-- [ ] Ruijie
+- [x] Ruijie
 - [ ] MikroTik
 
 ### Commands:

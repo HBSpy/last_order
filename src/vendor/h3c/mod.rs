@@ -16,7 +16,7 @@ pub struct H3cDevice<C: Connection> {
 }
 
 // Constants for error messages when executing commands
-const INVALID_INPUT: &str = "% Unrecognized command found at '^' position.\r\n";
+const INVALID_INPUT: &str = "% Unrecognized command found at '^' position.";
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     fn as_any(&mut self) -> &mut dyn std::any::Any
@@ -45,7 +45,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     fn execute(&mut self, command: &str) -> Result<String, Error> {
         let output = self.connection.execute(command, &self.prompt)?;
 
-        if output.ends_with(INVALID_INPUT) {
+        if output.contains(INVALID_INPUT) {
             return Err(Error::CommandExecution(command.to_string()));
         }
 
@@ -136,7 +136,7 @@ mod tests {
             config.execute("interface GigabitEthernet 1/0/8")?;
 
             let result = config.execute("display this")?;
-            assert!(result.contains("to-HPC"), "{}", result);
+            assert!(result.contains("to-HMBP"), "{}", result);
 
             config.execute("quit")?;
         }

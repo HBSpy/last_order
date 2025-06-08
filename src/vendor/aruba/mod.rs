@@ -16,8 +16,8 @@ pub struct ArubaDevice<C: Connection> {
 }
 
 // Constants for error messages when executing commands
-const INVALID_INPUT: &str = "Invalid input detected at '^' marker.\r\n";
-const PLATFORM_NOT_APPLICABLE: &str = "Command not applicable for this platform\r\n";
+const INVALID_INPUT: &str = "Invalid input detected at '^' marker.";
+const PLATFORM_NOT_APPLICABLE: &str = "Command not applicable for this platform";
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
     fn as_any(&mut self) -> &mut dyn std::any::Any
@@ -46,7 +46,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
     fn execute(&mut self, command: &str) -> Result<String, Error> {
         let output = self.connection.execute(command, &self.prompt)?;
 
-        if output.ends_with(INVALID_INPUT) || output.ends_with(PLATFORM_NOT_APPLICABLE) {
+        if output.contains(INVALID_INPUT) || output.contains(PLATFORM_NOT_APPLICABLE) {
             return Err(Error::CommandExecution(command.to_string()));
         }
 

@@ -16,7 +16,7 @@ pub struct CiscoDevice<C: Connection> {
 }
 
 // Constants for error messages when executing commands
-const INVALID_INPUT: &str = "% Invalid input detected at '^' marker.\r\n\r\n";
+const INVALID_INPUT: &str = "% Invalid input detected at '^' marker.";
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
     fn as_any(&mut self) -> &mut dyn std::any::Any
@@ -45,7 +45,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
     fn execute(&mut self, command: &str) -> Result<String, Error> {
         let output = self.connection.execute(command, &self.prompt)?;
 
-        if output.ends_with(INVALID_INPUT) {
+        if output.contains(INVALID_INPUT) {
             return Err(Error::CommandExecution(command.to_string()));
         }
 

@@ -17,7 +17,7 @@ pub struct HuaweiDevice<C: Connection> {
 }
 
 // Constants for error messages when executing commands
-const INVALID_INPUT: &str = "Error: Unrecognized command found at '^' position.\r\n";
+const INVALID_INPUT: &str = "Error: Unrecognized command found at '^' position.";
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
     fn as_any(&mut self) -> &mut dyn Any
@@ -46,7 +46,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
     fn execute(&mut self, command: &str) -> Result<String, Error> {
         let output = self.connection.execute(command, &self.prompt)?;
 
-        if output.ends_with(INVALID_INPUT) {
+        if output.contains(INVALID_INPUT) {
             return Err(Error::CommandExecution(command.to_string()));
         }
 
