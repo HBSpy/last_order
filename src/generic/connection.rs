@@ -2,6 +2,7 @@ use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+use encoding_rs::{Encoding, UTF_8};
 use log::debug;
 use regex::Regex;
 use ssh2::{Channel, MethodType, Session};
@@ -17,6 +18,7 @@ pub trait Connection {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        encoding: &'static Encoding,
     ) -> Result<Self::ConnectionHandler, Error>;
 
     /// Reads output until a prompt matching the provided regex is found.
@@ -31,6 +33,7 @@ pub struct SSHConnection {
     #[allow(dead_code)]
     sess: Session,
     channel: Channel,
+    encoding: &'static Encoding,
 }
 
 impl SSHConnection {
@@ -86,7 +89,10 @@ impl SSHConnection {
     }
 
     /// Creates a new SSH channel session.
-    fn make_channel_session(session: Session) -> Result<SSHConnection, Error> {
+    fn make_channel_session(
+        session: Session,
+        encoding: &'static Encoding,
+    ) -> Result<SSHConnection, Error> {
         let mut channel = session
             .channel_session()
             .map_err(|e| Error::Generic(e.into()))?;
@@ -98,28 +104,8 @@ impl SSHConnection {
         Ok(SSHConnection {
             sess: session,
             channel,
+            encoding,
         })
-    }
-
-    /// Connects using SSH agent authentication.
-    pub fn connect_agentauth<A: ToSocketAddrs>(
-        addr: A,
-        username: &str,
-        timeout: Option<Duration>,
-    ) -> Result<SSHConnection, Error> {
-        let sess = Self::establish_connection(addr, timeout)?;
-        sess.userauth_agent(username)
-            .map_err(|_| Error::AuthenticationFailed {
-                user: username.to_string(),
-            })?;
-
-        if !sess.authenticated() {
-            return Err(Error::AuthenticationFailed {
-                user: username.to_string(),
-            });
-        }
-
-        Self::make_channel_session(sess)
     }
 }
 
@@ -130,6 +116,7 @@ impl Connection for SSHConnection {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        encoding: &'static Encoding,
     ) -> Result<SSHConnection, Error> {
         let username = username.unwrap_or("admin");
         let password = password.unwrap_or("admin");
@@ -146,7 +133,7 @@ impl Connection for SSHConnection {
             });
         }
 
-        Self::make_channel_session(sess)
+        Self::make_channel_session(sess, encoding)
     }
 
     fn read(&mut self, prompt: &Regex) -> Result<String, Error> {
@@ -186,11 +173,28 @@ impl Connection for SSHConnection {
         debug!("Executing command: {}", command);
 
         let command_with_newline = format!("{}\n", command);
+        let command_bytes = if self.encoding == UTF_8 {
+            command_with_newline.as_bytes()
+        } else {
+            let (cow, _, had_errors) = self.encoding.encode(&command_with_newline);
+            if had_errors {
+                return Err(Error::Generic(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Failed to encode command to {}", self.encoding.name()),
+                )));
+            }
+            &cow.into_owned()
+        };
 
         self.channel
-            .write_all(command_with_newline.as_bytes())
+            .write_all(&command_bytes)
             .and_then(|_| self.channel.flush())
-            .map_err(|_| Error::CommandExecution(command.to_string()))?;
+            .map_err(|e| {
+                Error::CommandExecution(crate::error::CommandError::Generic {
+                    command: command.to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let output = self.read(prompt)?;
         let trimmed = prompt.replace_all(&output, "").to_string();

@@ -6,6 +6,7 @@ use crate::error::Error;
 use crate::generic::config::{ConfigSession, ConfigurationMode};
 use crate::generic::connection::{Connection, SSHConnection};
 use crate::generic::device::NetworkDevice;
+use crate::ConnectConfig;
 
 pub type H3cSSH = H3cDevice<SSHConnection>;
 
@@ -30,9 +31,10 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        config: ConnectConfig<'_>,
     ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)?,
+            connection: C::connect(addr, username, password, config.encoding)?,
             prompt: Regex::new(r"[<\[].*[>\]]$").expect("Invalid prompt regex"),
         };
 
@@ -104,7 +106,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{create_network_device, Vendor};
+    use crate::{connect, Vendor};
 
     #[test]
     fn test_h3c() -> anyhow::Result<()> {
@@ -114,7 +116,7 @@ mod tests {
         let user = Some("HBSpy");
         let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-        let mut ssh = create_network_device(Vendor::H3C, addr, user, pass.as_deref())?;
+        let mut ssh = connect(Vendor::H3C, addr, user, pass.as_deref())?;
 
         let result = ssh.execute("BAD_COMMAND");
         assert!(result.is_err(), "Expected an Err: {:?}", result);

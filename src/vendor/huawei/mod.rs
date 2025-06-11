@@ -99,7 +99,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{create_network_device, Vendor};
+    use crate::{connect, Vendor};
 
     #[test]
     fn test_huawei() -> anyhow::Result<()> {
@@ -109,7 +109,7 @@ mod tests {
         let user = Some("HBSpy");
         let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-        let mut ssh = create_network_device(Vendor::Huawei, addr, user, pass.as_deref())?;
+        let mut ssh = connect(Vendor::Huawei, addr, user, pass.as_deref())?;
 
         let result = ssh.execute("BAD_COMMAND");
         assert!(result.is_err(), "Expected an Err: {:?}", result);

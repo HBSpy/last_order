@@ -15,7 +15,20 @@ A Rust library for managing network devices.
 
 ## TODO
 
-- [ ] Test error handling
+### Errors
+
+identify command execution errors
+
+```
+ % Unrecognized command found at '^' position.
+
+aruba:
+Command not applicable for this platform
+
+ruijie:
+% User doesn't have sufficient privilege to execute this command.
+```
+
 
 ### Vendors
 

@@ -1,8 +1,7 @@
-use std::{any::Any, net::ToSocketAddrs};
-
-use crate::error::Error;
+use std::net::ToSocketAddrs;
 
 use super::config::ConfigSession;
+use crate::{error::Error, ConnectConfig};
 
 /// Trait for network devices with vendor-specific behavior.
 pub trait NetworkDevice {
@@ -11,6 +10,7 @@ pub trait NetworkDevice {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        config: ConnectConfig<'_>,
     ) -> Result<Self, Error>
     where
         Self: Sized;
@@ -24,7 +24,7 @@ pub trait NetworkDevice {
     }
 
     /// Returns the device as an Any trait object for downcasting.
-    fn as_any(&mut self) -> &mut dyn Any
+    fn as_any(&mut self) -> &mut dyn std::any::Any
     where
         Self: 'static;
 

@@ -33,10 +33,13 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
     ) -> Result<Self, Error> {
         let mut device = Self {
             connection: C::connect(addr, username, password)?,
-            prompt: Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?#$").expect("Invalid prompt regex"),
+            prompt: Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?[>#]$").expect("Invalid prompt regex"),
         };
 
-        device.connection.read(&device.prompt)?;
+        let welcome = device.connection.read(&device.prompt)?;
+
+        dbg!(welcome);
+
         device.execute("terminal length 0")?;
 
         Ok(device)
@@ -100,7 +103,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]
-    use crate::{create_network_device, Vendor};
+    use crate::{connect, Vendor};
 
     #[ignore = "no test device"]
     #[test]

@@ -94,7 +94,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]
-    use crate::{create_network_device, Vendor};
+    use crate::{connect, Vendor};
 
     #[ignore = "no test device"]
     #[test]
