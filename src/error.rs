@@ -4,13 +4,13 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CommandError {
-    #[error("Failed to execute command '{command}': {message}")]
+    #[error("'{command}': {message}")]
     Generic { command: String, message: String },
 
-    #[error("Insufficient privilege for command '{command}'")]
+    #[error("'{command}': Insufficient privilege")]
     NoPrivilege { command: String },
 
-    #[error("Invalid input for command '{command}'")]
+    #[error("'{command}': Invalid input")]
     InvalidInput { command: String },
 }
 
@@ -22,7 +22,7 @@ pub enum Error {
     #[error("Authentication failed for user {user}")]
     AuthenticationFailed { user: String },
 
-    #[error("Command execution failed: {0}")]
+    #[error("Failed to execute command {0}")]
     CommandExecution(#[source] CommandError),
 
     #[error("Failed to enter configuration mode")]
@@ -30,4 +30,10 @@ pub enum Error {
 
     #[error("Failed to exit configuration mode")]
     ExitConfigMode,
+
+    #[error("Failed to {operation} to {encoding_name}")]
+    EncodingError {
+        operation: String,
+        encoding_name: String,
+    },
 }

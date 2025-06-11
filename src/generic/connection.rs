@@ -149,7 +149,21 @@ impl Connection for SSHConnection {
                     break;
                 }
                 Ok(size) => {
-                    let str = String::from_utf8_lossy(&buf[..size]);
+                    let str = if self.encoding == UTF_8 {
+                        String::from_utf8_lossy(&buf[..size])
+                    } else {
+                        let (cow, _, had_errors) = self.encoding.decode(&buf[..size]);
+
+                        if had_errors {
+                            return Err(Error::EncodingError {
+                                operation: "decode".to_string(),
+                                encoding_name: self.encoding.name().to_string(),
+                            });
+                        }
+
+                        cow
+                    };
+
                     debug!("Read: {}", str);
                     output.push_str(&str);
 
@@ -177,17 +191,19 @@ impl Connection for SSHConnection {
             command_with_newline.as_bytes()
         } else {
             let (cow, _, had_errors) = self.encoding.encode(&command_with_newline);
+
             if had_errors {
-                return Err(Error::Generic(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Failed to encode command to {}", self.encoding.name()),
-                )));
+                return Err(Error::EncodingError {
+                    operation: "encode".to_string(),
+                    encoding_name: self.encoding.name().to_string(),
+                });
             }
+
             &cow.into_owned()
         };
 
         self.channel
-            .write_all(&command_bytes)
+            .write_all(command_bytes)
             .and_then(|_| self.channel.flush())
             .map_err(|e| {
                 Error::CommandExecution(crate::error::CommandError::Generic {

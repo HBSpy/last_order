@@ -1,11 +1,4 @@
-use std::net::ToSocketAddrs;
-
-use regex::Regex;
-
-use crate::error::Error;
-use crate::generic::config::{ConfigSession, ConfigurationMode};
-use crate::generic::connection::{Connection, SSHConnection};
-use crate::generic::device::NetworkDevice;
+use super::prelude::*;
 
 pub type CiscoSSH = CiscoDevice<SSHConnection>;
 
@@ -30,9 +23,10 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        _config: ConnectConfig,
     ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)?,
+            connection: C::connect(addr, username, password, encoding_rs::UTF_8)?,
             prompt: Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?#$").expect("Invalid prompt regex"),
         };
 
@@ -46,7 +40,9 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for CiscoDevice<C> {
         let output = self.connection.execute(command, &self.prompt)?;
 
         if output.contains(INVALID_INPUT) {
-            return Err(Error::CommandExecution(command.to_string()));
+            return Err(Error::CommandExecution(CommandError::InvalidInput {
+                command: command.to_string(),
+            }));
         }
 
         let prefix = format!("{}\r\n", command);

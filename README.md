@@ -12,23 +12,7 @@ A Rust library for managing network devices.
 - Disable screen-length to avoid pagination
 - Raw command execution
 - Enter config mode
-
-## TODO
-
-### Errors
-
-identify command execution errors
-
-```
- % Unrecognized command found at '^' position.
-
-aruba:
-Command not applicable for this platform
-
-ruijie:
-% User doesn't have sufficient privilege to execute this command.
-```
-
+- Handle GBK encoding for such as Ruijie devices
 
 ### Vendors
 
@@ -44,10 +28,11 @@ ruijie:
 - version
 - logbuffer
 - ping
+- traceroute
 
 ## Example
 
-Refer to vendor::\*::tests::test\_\*\_device
+Refer to vendor::\*::tests::test\_\*
 
 ## XXX
 
