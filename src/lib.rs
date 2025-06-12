@@ -34,9 +34,19 @@ impl<'a> Default for ConnectConfig<'a> {
     }
 }
 
+pub fn connect<A: ToSocketAddrs>(
+    vendor: Vendor,
+    addr: A,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Result<Box<dyn NetworkDevice>, error::Error> {
+    connect_with_config(vendor, addr, username, password, ConnectConfig::default())
+}
+
 macro_rules! connect_vendor {
     ($($vendor:ident => $module:ident::$type:ident),* $(,)?) => {
-        pub fn connect<A: ToSocketAddrs>(
+
+        pub fn connect_with_config<A: ToSocketAddrs>(
             vendor: Vendor,
             addr: A,
             username: Option<&str>,

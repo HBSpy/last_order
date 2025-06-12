@@ -40,8 +40,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
     ) -> Result<Self, Error> {
         let mut device = Self {
             connection: C::connect(addr, username, password, encoding_rs::GBK)?,
-            // prompt: Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?[>#]$").expect("Invalid prompt regex"),
-            prompt: Regex::new(r"[<\[].*[>\]]$").expect("Invalid prompt regex"),
+            prompt: Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?[>#]$").expect("Invalid prompt regex"),
             enable_password: config.enable_password.map(String::from),
         };
 
@@ -49,8 +48,9 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
 
         match device.execute("terminal length 0") {
             Ok(_) => return Ok(device),
-            Err(Error::CommandExecution(CommandError::NoPrivilege { command: _ })) => {
+            Err(Error::CommandExecution(CommandError::NoPrivilege { command })) => {
                 device.enable()?;
+                device.execute(&command)?;
             }
             Err(e) => return Err(e),
         }

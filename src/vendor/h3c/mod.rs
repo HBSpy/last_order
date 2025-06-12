@@ -103,7 +103,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{connect, ConnectConfig, Vendor};
+    use crate::{connect, Vendor};
 
     #[test]
     fn test_h3c() -> anyhow::Result<()> {
@@ -113,13 +113,7 @@ mod tests {
         let user = Some("HBSpy");
         let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-        let mut ssh = connect(
-            Vendor::H3C,
-            addr,
-            user,
-            pass.as_deref(),
-            ConnectConfig::default(),
-        )?;
+        let mut ssh = connect(Vendor::H3C, addr, user, pass.as_deref())?;
 
         let result = ssh.execute("BAD_COMMAND");
         assert!(result.is_err(), "Expected an Err: {:?}", result);
