@@ -8,6 +8,7 @@ repository = "https://github.com/HBSpy/last_order"
 description = "A Rust library for managing network devices."
 
 [dependencies]
+encoding_rs = "0.8"
 log = "0.4"
 regex = "1.11"
 ssh2 = "0.9"

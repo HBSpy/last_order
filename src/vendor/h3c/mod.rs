@@ -1,11 +1,4 @@
-use std::net::ToSocketAddrs;
-
-use regex::Regex;
-
-use crate::error::Error;
-use crate::generic::config::{ConfigSession, ConfigurationMode};
-use crate::generic::connection::{Connection, SSHConnection};
-use crate::generic::device::NetworkDevice;
+use super::prelude::*;
 
 pub type H3cSSH = H3cDevice<SSHConnection>;
 
@@ -16,7 +9,10 @@ pub struct H3cDevice<C: Connection> {
 }
 
 // Constants for error messages when executing commands
-const INVALID_INPUT: &str = "% Unrecognized command found at '^' position.";
+const INVALID_INPUT: [&str; 2] = [
+    "% Unrecognized command found at '^' position.",
+    "% Too many parameters found at '^' position.",
+];
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     fn as_any(&mut self) -> &mut dyn std::any::Any
@@ -30,9 +26,10 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        _config: ConnectConfig<'_>,
     ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)?,
+            connection: C::connect(addr, username, password, encoding_rs::UTF_8)?,
             prompt: Regex::new(r"[<\[].*[>\]]$").expect("Invalid prompt regex"),
         };
 
@@ -45,8 +42,10 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
     fn execute(&mut self, command: &str) -> Result<String, Error> {
         let output = self.connection.execute(command, &self.prompt)?;
 
-        if output.contains(INVALID_INPUT) {
-            return Err(Error::CommandExecution(command.to_string()));
+        if INVALID_INPUT.iter().any(|&msg| output.contains(msg)) {
+            return Err(Error::CommandExecution(CommandError::InvalidInput {
+                command: command.to_string(),
+            }));
         }
 
         let prefix = format!("{}\r\n", command);
@@ -104,7 +103,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for H3cDevice<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{create_network_device, Vendor};
+    use crate::{connect, Vendor};
 
     #[test]
     fn test_h3c() -> anyhow::Result<()> {
@@ -114,7 +113,7 @@ mod tests {
         let user = Some("HBSpy");
         let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-        let mut ssh = create_network_device(Vendor::H3C, addr, user, pass.as_deref())?;
+        let mut ssh = connect(Vendor::H3C, addr, user, pass.as_deref())?;
 
         let result = ssh.execute("BAD_COMMAND");
         assert!(result.is_err(), "Expected an Err: {:?}", result);

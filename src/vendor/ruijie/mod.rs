@@ -1,11 +1,4 @@
-use std::net::ToSocketAddrs;
-
-use regex::Regex;
-
-use crate::error::Error;
-use crate::generic::config::{ConfigSession, ConfigurationMode};
-use crate::generic::connection::{Connection, SSHConnection};
-use crate::generic::device::NetworkDevice;
+use super::prelude::*;
 
 pub type RuijieSSH = RuijieDevice<SSHConnection>;
 
@@ -13,10 +6,23 @@ pub type RuijieSSH = RuijieDevice<SSHConnection>;
 pub struct RuijieDevice<C: Connection> {
     connection: C,
     prompt: Regex,
+    enable_password: Option<String>,
+}
+
+impl<C: Connection> RuijieDevice<C> {
+    pub fn enable(&mut self) -> Result<(), Error> {
+        let command = format!("enable\n{}", self.enable_password.as_deref().unwrap_or(""));
+
+        self.prompt = Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?#$").expect("Invalid prompt regex");
+        self.connection.execute(&command, &self.prompt)?;
+
+        Ok(())
+    }
 }
 
 // Constants for error messages when executing commands
-const INVALID_INPUT: &str = "% Invalid input detected at '^' marker.\r\n\r\n";
+const INVALID_INPUT: &str = "% Invalid input detected at '^' marker.";
+const NO_PRIVILEGE: &str = "% User doesn't have sufficient privilege to execute this command.";
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
     fn as_any(&mut self) -> &mut dyn std::any::Any
@@ -30,14 +36,24 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        config: ConnectConfig<'_>,
     ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)?,
-            prompt: Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?#$").expect("Invalid prompt regex"),
+            connection: C::connect(addr, username, password, encoding_rs::GBK)?,
+            prompt: Regex::new(r"[a-zA-Z0-9_-]+(\(config\))?[>#]$").expect("Invalid prompt regex"),
+            enable_password: config.enable_password.map(String::from),
         };
 
         device.connection.read(&device.prompt)?;
-        device.execute("terminal length 0")?;
+
+        match device.execute("terminal length 0") {
+            Ok(_) => return Ok(device),
+            Err(Error::CommandExecution(CommandError::NoPrivilege { command })) => {
+                device.enable()?;
+                device.execute(&command)?;
+            }
+            Err(e) => return Err(e),
+        }
 
         Ok(device)
     }
@@ -46,7 +62,15 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
         let output = self.connection.execute(command, &self.prompt)?;
 
         if output.contains(INVALID_INPUT) {
-            return Err(Error::CommandExecution(command.to_string()));
+            return Err(Error::CommandExecution(CommandError::InvalidInput {
+                command: command.to_string(),
+            }));
+        }
+
+        if output.contains(NO_PRIVILEGE) {
+            return Err(Error::CommandExecution(CommandError::NoPrivilege {
+                command: command.to_string(),
+            }));
         }
 
         let prefix = format!("{}\r\n", command);
@@ -100,7 +124,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for RuijieDevice<C> {
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]
-    use crate::{create_network_device, Vendor};
+    use crate::{connect, Vendor};
 
     #[ignore = "no test device"]
     #[test]

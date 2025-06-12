@@ -1,11 +1,4 @@
-use std::net::ToSocketAddrs;
-
-use regex::Regex;
-
-use crate::error::Error;
-use crate::generic::config::{ConfigSession, ConfigurationMode};
-use crate::generic::connection::{Connection, SSHConnection};
-use crate::generic::device::NetworkDevice;
+use super::prelude::*;
 
 pub type ArubaSSH = ArubaDevice<SSHConnection>;
 
@@ -16,8 +9,10 @@ pub struct ArubaDevice<C: Connection> {
 }
 
 // Constants for error messages when executing commands
-const INVALID_INPUT: &str = "Invalid input detected at '^' marker.";
-const PLATFORM_NOT_APPLICABLE: &str = "Command not applicable for this platform";
+const INVALID_INPUT: [&str; 2] = [
+    "Invalid input detected at '^' marker.",
+    "Command not applicable for this platform",
+];
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
     fn as_any(&mut self) -> &mut dyn std::any::Any
@@ -31,9 +26,10 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        _config: ConnectConfig,
     ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)?,
+            connection: C::connect(addr, username, password, encoding_rs::UTF_8)?,
             prompt: Regex::new(r"\(.+\)\s\[.+\]\s(\(config\)\s)?#$").expect("Invalid prompt regex"),
         };
 
@@ -46,8 +42,10 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
     fn execute(&mut self, command: &str) -> Result<String, Error> {
         let output = self.connection.execute(command, &self.prompt)?;
 
-        if output.contains(INVALID_INPUT) || output.contains(PLATFORM_NOT_APPLICABLE) {
-            return Err(Error::CommandExecution(command.to_string()));
+        if INVALID_INPUT.iter().any(|&msg| output.contains(msg)) {
+            return Err(Error::CommandExecution(CommandError::InvalidInput {
+                command: command.to_string(),
+            }));
         }
 
         let prefix = format!("{}\n\r", command);
@@ -94,7 +92,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for ArubaDevice<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{create_network_device, Vendor};
+    use crate::{connect, Vendor};
 
     #[test]
     fn test_aruba() -> anyhow::Result<()> {
@@ -104,7 +102,7 @@ mod tests {
         let user = Some("HBSpy");
         let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-        let mut ssh = create_network_device(Vendor::Aruba, addr, user, pass.as_deref())?;
+        let mut ssh = connect(Vendor::Aruba, addr, user, pass.as_deref())?;
 
         let result = ssh.execute("BAD_COMMAND");
         assert!(result.is_err(), "Expected an Err: {:?}", result);

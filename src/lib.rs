@@ -2,13 +2,14 @@ use std::net::ToSocketAddrs;
 
 use strum::EnumString;
 
+pub mod error;
 pub mod generic;
-use generic::device::NetworkDevice;
-
 pub mod vendor;
 
-pub mod error;
-use error::Error;
+#[cfg(test)]
+mod tests;
+
+use generic::device::NetworkDevice;
 
 #[derive(Debug, Clone, Copy, PartialEq, EnumString)]
 #[strum(serialize_all = "snake_case")]
@@ -20,52 +21,51 @@ pub enum Vendor {
     Ruijie,
 }
 
-/// Creates a new network device based on the specified vendor.
-///
-/// # Arguments
-/// * `vendor` - The vendor of the device (e.g., Huawei, H3C).
-/// * `addr` - The address of the device (e.g., IP and port).
-/// * `username` - Optional username for authentication.
-/// * `password` - Optional password for authentication.
-///
-/// # Returns
-/// A `Result` containing a `Box<dyn NetworkDevice>` on success, or an error if the connection fails.
-pub fn create_network_device<A: ToSocketAddrs>(
+#[derive(Debug, Clone)]
+pub struct ConnectConfig<'a> {
+    pub enable_password: Option<&'a str>,
+}
+
+impl<'a> Default for ConnectConfig<'a> {
+    fn default() -> Self {
+        Self {
+            enable_password: None,
+        }
+    }
+}
+
+pub fn connect<A: ToSocketAddrs>(
     vendor: Vendor,
     addr: A,
     username: Option<&str>,
     password: Option<&str>,
-) -> Result<Box<dyn NetworkDevice>, Error> {
-    Ok(match vendor {
-        Vendor::Aruba => vendor::aruba::ArubaSSH::connect(addr, username, password)?.into_dyn(),
-        Vendor::Cisco => vendor::cisco::CiscoSSH::connect(addr, username, password)?.into_dyn(),
-        Vendor::H3C => vendor::h3c::H3cSSH::connect(addr, username, password)?.into_dyn(),
-        Vendor::Huawei => vendor::huawei::HuaweiSSH::connect(addr, username, password)?.into_dyn(),
-        Vendor::Ruijie => vendor::ruijie::RuijieSSH::connect(addr, username, password)?.into_dyn(),
-    })
+) -> Result<Box<dyn NetworkDevice>, error::Error> {
+    connect_with_config(vendor, addr, username, password, ConnectConfig::default())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+macro_rules! connect_vendor {
+    ($($vendor:ident => $module:ident::$type:ident),* $(,)?) => {
 
-    #[test]
-    fn dev() -> anyhow::Result<()> {
-        env_logger::try_init().ok();
+        pub fn connect_with_config<A: ToSocketAddrs>(
+            vendor: Vendor,
+            addr: A,
+            username: Option<&str>,
+            password: Option<&str>,
+            config: ConnectConfig,
+        ) -> Result<Box<dyn NetworkDevice>, error::Error> {
+            Ok(match vendor {
+                $(
+                    Vendor::$vendor => vendor::$module::$type::connect(addr, username, password, config)?.into_dyn(),
+                )*
+            })
+        }
+    };
+}
 
-        let ssh = (Vendor::H3C, format!("{}:22", "10.123.0.1"));
-        // let ssh = (Vendor::Huawei, format!("{}:22", "10.123.255.11"));
-        // let ssh = (Vendor::Aruba, format!("{}:22", "10.123.0.15"));
-
-        let user = Some("HBSpy");
-        let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
-
-        let mut ssh = create_network_device(ssh.0, ssh.1, user, pass.as_deref())?;
-
-        let result = ssh.execute("display wlan ap name WRD-South-3 verbose")?;
-
-        dbg!(&result);
-
-        Ok(())
-    }
+connect_vendor! {
+    Aruba => aruba::ArubaSSH,
+    Cisco => cisco::CiscoSSH,
+    H3C => h3c::H3cSSH,
+    Huawei => huawei::HuaweiSSH,
+    Ruijie => ruijie::RuijieSSH,
 }

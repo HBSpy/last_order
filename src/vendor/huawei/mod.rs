@@ -1,12 +1,4 @@
-use std::any::Any;
-use std::net::ToSocketAddrs;
-
-use regex::Regex;
-
-use crate::error::Error;
-use crate::generic::config::{ConfigSession, ConfigurationMode};
-use crate::generic::connection::{Connection, SSHConnection};
-use crate::generic::device::NetworkDevice;
+use super::prelude::*;
 
 pub type HuaweiSSH = HuaweiDevice<SSHConnection>;
 
@@ -20,7 +12,7 @@ pub struct HuaweiDevice<C: Connection> {
 const INVALID_INPUT: &str = "Error: Unrecognized command found at '^' position.";
 
 impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
-    fn as_any(&mut self) -> &mut dyn Any
+    fn as_any(&mut self) -> &mut dyn std::any::Any
     where
         Self: 'static,
     {
@@ -31,9 +23,10 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
         addr: A,
         username: Option<&str>,
         password: Option<&str>,
+        _config: ConnectConfig<'_>,
     ) -> Result<Self, Error> {
         let mut device = Self {
-            connection: C::connect(addr, username, password)?,
+            connection: C::connect(addr, username, password, encoding_rs::UTF_8)?,
             prompt: Regex::new(r"[<\[].*[>\]]$").expect("Invalid prompt regex"),
         };
 
@@ -47,7 +40,9 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
         let output = self.connection.execute(command, &self.prompt)?;
 
         if output.contains(INVALID_INPUT) {
-            return Err(Error::CommandExecution(command.to_string()));
+            return Err(Error::CommandExecution(CommandError::InvalidInput {
+                command: command.to_string(),
+            }));
         }
 
         let prefix = format!("{}\r\n", command);
@@ -99,7 +94,7 @@ impl<C: Connection<ConnectionHandler = C>> NetworkDevice for HuaweiDevice<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{create_network_device, Vendor};
+    use crate::{connect, Vendor};
 
     #[test]
     fn test_huawei() -> anyhow::Result<()> {
@@ -109,7 +104,7 @@ mod tests {
         let user = Some("HBSpy");
         let pass = Some(std::env::var("LO_TESTPASS").expect("LO_TESTPASS not set"));
 
-        let mut ssh = create_network_device(Vendor::Huawei, addr, user, pass.as_deref())?;
+        let mut ssh = connect(Vendor::Huawei, addr, user, pass.as_deref())?;
 
         let result = ssh.execute("BAD_COMMAND");
         assert!(result.is_err(), "Expected an Err: {:?}", result);

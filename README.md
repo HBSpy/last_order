@@ -12,10 +12,7 @@ A Rust library for managing network devices.
 - Disable screen-length to avoid pagination
 - Raw command execution
 - Enter config mode
-
-## TODO
-
-- [ ] Test error handling
+- Handle GBK encoding for such as Ruijie devices
 
 ### Vendors
 
@@ -31,10 +28,11 @@ A Rust library for managing network devices.
 - version
 - logbuffer
 - ping
+- traceroute
 
 ## Example
 
-Refer to vendor::\*::tests::test\_\*\_device
+Refer to vendor::\*::tests::test\_\*
 
 ## XXX
 
